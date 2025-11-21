@@ -1,0 +1,82 @@
+{
+    "num_processes": 15,
+    "messages_per_process": 150,
+    "messages_per_minute": 100,
+    "processes": [
+      {
+        "id": 0,
+        "address": "localhost",
+        "port": 8000
+      },
+      {
+        "id": 1,
+        "address": "localhost",
+        "port": 8001
+      },
+      {
+        "id": 2,
+        "address": "localhost",
+        "port": 8002
+      },
+      {
+        "id": 3,
+        "address": "localhost",
+        "port": 8003
+      },
+      {
+        "id": 4,
+        "address": "localhost",
+        "port": 8004
+      },
+      {
+        "id": 5,
+        "address": "localhost",
+        "port": 8005
+      },
+      {
+        "id": 6,
+        "address": "localhost",
+        "port": 8006
+      },
+      {
+        "id": 7,
+        "address": "localhost",
+        "port": 8007
+      },
+      {
+        "id": 8,
+        "address": "localhost",
+        "port": 8008
+      },
+      {
+        "id": 9,
+        "address": "localhost",
+        "port": 8009
+      },
+      {
+        "id": 10,
+        "address": "localhost",
+        "port": 8010
+      },
+      {
+        "id": 11,
+        "address": "localhost",
+        "port": 8011
+      },
+      {
+        "id": 12,
+        "address": "localhost",
+        "port": 8012
+      },
+      {
+        "id": 13,
+        "address": "localhost",
+        "port": 8013
+      },
+      {
+        "id": 14,
+        "address": "localhost",
+        "port": 8014
+      }
+    ]
+  }
