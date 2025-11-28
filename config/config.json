@@ -66,12 +66,12 @@
       {
         "id": 12,
         "address": "localhost",
-        "port": 8012
+        "port": 9012
       },
       {
         "id": 13,
         "address": "localhost",
-        "port": 8013
+        "port": 9013
       },
       {
         "id": 14,
