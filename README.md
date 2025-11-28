@@ -392,26 +392,8 @@ ses-project/
 - Causal consistency in distributed systems
 - Message ordering in asynchronous networks
 
-## Project Completion Status
-
-- ✅ Algorithm Implementation: 100% (Vector clocks, buffering, delivery)
-- ✅ 15-process System: 100% (Multi-process concurrent execution)
-- ✅ Message Logging: 90% (Comprehensive logs, needs summary enhancement)
-- ✅ Interactive CLI: 85% (Basic commands, could add more statistics)
-- ⏳ Documentation: 95% (Detailed, needs demo video link)
-- ⏳ Demo Video: Pending (Ready to record)
-
 ## Author & Contact
 
-**Implementation**: SES Project Team
+**Implementation**: 22127327 - Tran Quoc Phong
+**Documentation**: 22127480 - Nguyen Trong Nghia
 **Created**: November 2025
-**For**: Distributed Systems Course
-
-## License
-
-Educational use only - for academic purposes
-
----
-
-**Last Updated**: 2025-11-27
-**Version**: 1.0
