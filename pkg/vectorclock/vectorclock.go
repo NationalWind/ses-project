@@ -6,34 +6,29 @@ import (
 )
 
 // VectorEntry represents (P', t) trong V_P
-// P' là process ID đích, t là vector timestamp
 type VectorEntry struct {
 	TargetProcessID int   // P'
 	Timestamp       []int // t - vector timestamp
 }
 
-// VectorClock cho thuật toán SES theo slide
-// Mỗi process lưu V_P: danh sách các (P', t)
+// VectorClock cho thuật toán SES
 type VectorClock struct {
 	entries      []VectorEntry // V_P: các cặp (process_id, timestamp)
-	localTime    []int         // tP: thời gian logic hiện tại tại process này
+	localTime    []int         // tP: thời gian logic hiện tại
 	processID    int           // ID của process này
 	numProcesses int
 	mu           sync.RWMutex
 }
 
-// NewVectorClock tạo vector clock mới
-// Ban đầu V_P rỗng, tP = [0, 0, ..., 0]
 func NewVectorClock(processID int, numProcesses int) *VectorClock {
 	return &VectorClock{
-		entries:      []VectorEntry{}, // V_P ban đầu rỗng
+		entries:      []VectorEntry{},
 		localTime:    make([]int, numProcesses),
 		processID:    processID,
 		numProcesses: numProcesses,
 	}
 }
 
-// GetLocalTime trả về tP hiện tại
 func (vc *VectorClock) GetLocalTime() []int {
 	vc.mu.RLock()
 	defer vc.mu.RUnlock()
@@ -43,7 +38,6 @@ func (vc *VectorClock) GetLocalTime() []int {
 	return timeCopy
 }
 
-// GetEntries trả về bản sao của V_P
 func (vc *VectorClock) GetEntries() []VectorEntry {
 	vc.mu.RLock()
 	defer vc.mu.RUnlock()
@@ -61,19 +55,19 @@ func (vc *VectorClock) GetEntries() []VectorEntry {
 }
 
 // PrepareToSend chuẩn bị gửi message đến targetID
-// Theo slide:
-// 1. Gửi message M với timestamp tm = tP hiện tại, cùng V_P
-// 2. Thêm (targetID, tm) vào V_P (ghi đè nếu đã tồn tại)
-// 3. Tăng tP[processID]++
+// Theo SES algorithm:
+// 1. Gửi message với tm = tP hiện tại và V_P (không bao gồm entry cho target)
+// 2. Thêm/update (targetID, tm) vào V_P của sender
+// 3. Increment tP[senderID]++
 func (vc *VectorClock) PrepareToSend(targetID int) (tm []int, vp []VectorEntry) {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
 
-	// 1. tm = tP hiện tại (trước khi increment)
+	// 1. tm = tP hiện tại (TRƯỚC khi increment)
 	tm = make([]int, len(vc.localTime))
 	copy(tm, vc.localTime)
 
-	// 2. V_P để gửi đi (không bao gồm entry cho targetID)
+	// 2. Chuẩn bị V_P để gửi (KHÔNG bao gồm entry cho targetID)
 	vp = []VectorEntry{}
 	for _, entry := range vc.entries {
 		if entry.TargetProcessID != targetID {
@@ -86,18 +80,17 @@ func (vc *VectorClock) PrepareToSend(targetID int) (tm []int, vp []VectorEntry) 
 		}
 	}
 
-	// 3. Thêm/cập nhật (targetID, tm) vào V_P của sender
+	// 3. Cập nhật V_P: thêm/update (targetID, tm)
+	// Entry này KHÔNG được gửi trong message, nhưng được lưu local
 	found := false
 	for i := range vc.entries {
 		if vc.entries[i].TargetProcessID == targetID {
-			// Ghi đè
 			copy(vc.entries[i].Timestamp, tm)
 			found = true
 			break
 		}
 	}
 	if !found {
-		// Thêm mới
 		tmCopy := make([]int, len(tm))
 		copy(tmCopy, tm)
 		vc.entries = append(vc.entries, VectorEntry{
@@ -106,25 +99,28 @@ func (vc *VectorClock) PrepareToSend(targetID int) (tm []int, vp []VectorEntry) 
 		})
 	}
 
-	// 4. Increment local time: tP[processID]++
+	// 4. Increment tP[senderID]++ (sau khi set tm)
 	vc.localTime[vc.processID]++
 
 	return tm, vp
 }
 
-// CanDeliver kiểm tra điều kiện deliver message
-// Theo slide:
-// - Nếu V_M không chứa (receiverID, t) -> có thể deliver
-// - Nếu có (receiverID, t):
-//   - Nếu tm > tP[receiverID]: buffer (chưa deliver)
-//   - Nếu tm <= tP[receiverID]: deliver
+// CanDeliver kiểm tra điều kiện deliver theo SES algorithm
+// Theo slide SES:
+// 1. Tìm entry (receiverID, t) trong V_M
+// 2. Nếu KHÔNG có entry → có thể deliver
+// 3. Nếu có entry (receiverID, t):
+//   - Nếu t >= tP: buffer (có message dependency chưa đến)
+//   - Nếu t < tP: deliver (mọi dependency đã satisfied)
 //
-// Giải thích: t > tP nghĩa là "có sự kiện trong process khác mà P chưa cập nhật"
-func (vc *VectorClock) CanDeliver(tm []int, vm []VectorEntry) (bool, string) {
+// Giải thích: entry (receiverID, t) trong V_M có nghĩa là
+// "sender đã gửi message khác đến receiverID với timestamp t"
+// Nếu t >= tP[receiverID], có nghĩa là receiver chưa nhận message đó
+func (vc *VectorClock) CanDeliver(senderID int, tm []int, vm []VectorEntry) (bool, string) {
 	vc.mu.RLock()
 	defer vc.mu.RUnlock()
 
-	// Tìm entry (receiverID, t) trong V_M
+	// 1. Tìm entry (receiverID, t) trong V_M
 	var entryForMe *VectorEntry = nil
 	for i := range vm {
 		if vm[i].TargetProcessID == vc.processID {
@@ -133,56 +129,59 @@ func (vc *VectorClock) CanDeliver(tm []int, vm []VectorEntry) (bool, string) {
 		}
 	}
 
-	// Nếu không có entry cho receiverID -> deliver
+	// 2. Nếu KHÔNG có entry cho receiver → có thể deliver
 	if entryForMe == nil {
-		return true, "no entry for receiver in V_M"
+		return true, "no dependency"
 	}
 
-	// Có entry (receiverID, t)
-	// Kiểm tra: tm <= tP?
-	// Theo slide: tm <= tP[receiverID] (so sánh scalar)
-	// Nhưng tm là vector, nên ta cần so sánh vector
+	// 3. Có entry (receiverID, t) → kiểm tra t với tP
+	// Điều kiện deliver: t < tP (component-wise)
+	// Nghĩa là: ∀j: t[j] <= tP[j], và tồn tại ít nhất 1 j: t[j] < tP[j]
+	// HOẶC đơn giản hơn: NOT(t >= tP)
 
-	// Cách hiểu: kiểm tra xem có dependency nào chưa thỏa mãn không
-	// Nếu entryForMe.Timestamp[j] > localTime[j] cho bất kỳ j nào
-	// -> có sự kiện từ process j mà ta chưa biết -> buffer
-
+	// Kiểm tra xem có component nào của t > tP không
 	for j := 0; j < len(entryForMe.Timestamp) && j < len(vc.localTime); j++ {
 		if entryForMe.Timestamp[j] > vc.localTime[j] {
-			return false, fmt.Sprintf("missing dependency from P%d: need %d, have %d",
-				j, entryForMe.Timestamp[j], vc.localTime[j])
+			// t >= tP (ít nhất 1 component) → BUFFER
+			return false, fmt.Sprintf("dependency not satisfied: entry has t[%d]=%d > tP[%d]=%d",
+				j, entryForMe.Timestamp[j], j, vc.localTime[j])
 		}
 	}
 
+	// Tất cả components: t[j] <= tP[j] → DELIVER
 	return true, "all dependencies satisfied"
 }
 
-// DeliverMessage cập nhật vector clock sau khi deliver
-// Theo slide: merge V_M vào V_P và cập nhật tP
+// DeliverMessage cập nhật vector clock sau khi deliver message
+// Theo SES algorithm:
+// 1. Cập nhật tP theo quy tắc vector clock:
+//   - tP = max(tP, tm) component-wise
+//   - tP[senderID]++ (vì đã nhận 1 message từ sender)
+//
+// 2. Merge V_M vào V_P
 func (vc *VectorClock) DeliverMessage(senderID int, tm []int, vm []VectorEntry) {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
 
-	// 1. Cập nhật tP với tm
-	// tP = max(tP, tm) cho mỗi component
+	// 1. Cập nhật tP = max(tP, tm) component-wise
 	for i := 0; i < len(vc.localTime) && i < len(tm); i++ {
 		if tm[i] > vc.localTime[i] {
 			vc.localTime[i] = tm[i]
 		}
 	}
 
-	// 2. Increment tP[senderID] vì ta vừa nhận 1 message từ sender
+	// 2. Increment tP[senderID]++ (quy tắc vector clock khi nhận message)
 	vc.localTime[senderID]++
 
 	// 3. Merge V_M vào V_P
 	// Với mỗi entry (P', t') trong V_M:
-	// - Nếu V_P đã có (P', t): cập nhật t = max(t, t')
-	// - Nếu chưa có: thêm mới
+	// - Nếu V_P có (P', t): cập nhật t = max(t, t') component-wise
+	// - Nếu không: thêm (P', t') vào V_P
 	for _, vmEntry := range vm {
 		found := false
 		for i := range vc.entries {
 			if vc.entries[i].TargetProcessID == vmEntry.TargetProcessID {
-				// Merge: lấy max cho mỗi component
+				// Merge: component-wise max
 				for j := 0; j < len(vc.entries[i].Timestamp) && j < len(vmEntry.Timestamp); j++ {
 					if vmEntry.Timestamp[j] > vc.entries[i].Timestamp[j] {
 						vc.entries[i].Timestamp[j] = vmEntry.Timestamp[j]
@@ -193,7 +192,7 @@ func (vc *VectorClock) DeliverMessage(senderID int, tm []int, vm []VectorEntry) 
 			}
 		}
 		if !found {
-			// Thêm mới
+			// Thêm entry mới
 			tsCopy := make([]int, len(vmEntry.Timestamp))
 			copy(tsCopy, vmEntry.Timestamp)
 			vc.entries = append(vc.entries, VectorEntry{
@@ -204,7 +203,6 @@ func (vc *VectorClock) DeliverMessage(senderID int, tm []int, vm []VectorEntry) 
 	}
 }
 
-// String trả về string representation
 func (vc *VectorClock) String() string {
 	vc.mu.RLock()
 	defer vc.mu.RUnlock()
@@ -212,14 +210,10 @@ func (vc *VectorClock) String() string {
 	return fmt.Sprintf("tP=%v, V_P=%v", vc.localTime, vc.entries)
 }
 
-// PruneEntries loại bỏ các entry cũ không cần thiết
-// (Optional optimization)
 func (vc *VectorClock) PruneEntries() {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
 
-	// Loại bỏ entry (P', t) nếu t <= tP
-	// Vì những entry này không còn cần thiết để kiểm tra causality
 	newEntries := []VectorEntry{}
 	for _, entry := range vc.entries {
 		needKeep := false

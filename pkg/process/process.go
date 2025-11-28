@@ -203,8 +203,8 @@ func (p *Process) receiveMessage(msg message.Message) {
 	fmt.Printf("[P%d] RECEIVED from P%d: %s (tm=%v, tP=%v)\n",
 		p.ID, msg.SenderID, msg.ID, msg.Timestamp, localTime)
 
-	// Kiểm tra điều kiện deliver theo SES
-	canDeliver, reason := p.VectorClock.CanDeliver(msg.Timestamp, msg.VectorP)
+	// QUAN TRỌNG: Truyền senderID vào CanDeliver
+	canDeliver, reason := p.VectorClock.CanDeliver(msg.SenderID, msg.Timestamp, msg.VectorP)
 
 	if canDeliver {
 		p.deliverMessage(msg)
@@ -249,7 +249,8 @@ func (p *Process) tryDeliverBuffered() {
 
 		for i := 0; i < len(p.MessageBuffer); i++ {
 			msg := p.MessageBuffer[i]
-			canDeliver, _ := p.VectorClock.CanDeliver(msg.Timestamp, msg.VectorP)
+			// QUAN TRỌNG: Truyền senderID vào CanDeliver
+			canDeliver, _ := p.VectorClock.CanDeliver(msg.SenderID, msg.Timestamp, msg.VectorP)
 
 			if canDeliver {
 				p.Logger.Printf("📦 DELIVERING FROM BUFFER (Round %d): %s", deliveryRound, msg.ID)

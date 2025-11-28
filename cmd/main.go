@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/NationalWind/ses-project/pkg/process"
 )
@@ -83,10 +84,28 @@ func main() {
 
 	fmt.Printf("[P%d] Process started successfully!\n", processID)
 
-	// Nếu autoSend = true thì gửi message và exit luôn
+	// Nếu autoSend = true
 	if autoSend {
-		fmt.Printf("[P%d] Auto sending messages...\n", processID)
+		// QUAN TRỌNG: Đợi tất cả process khác start lên
+		// Delay dài hơn để đảm bảo mọi process đã ready
+		fmt.Printf("[P%d] Waiting for all processes to start...\n", processID)
+		time.Sleep(5 * time.Second)
+
+		fmt.Printf("[P%d] Starting to send messages...\n", processID)
 		p.SendMessages(config.MessagesPerProcess, config.MessagesPerMinute)
+
+		// Đợi một chút để process khác gửi messages đến
+		fmt.Printf("[P%d] Finished sending, waiting for incoming messages...\n", processID)
+		time.Sleep(10 * time.Second)
+
+		// Chờ tất cả messages được deliver
+		fmt.Printf("[P%d] Waiting for message delivery to complete...\n", processID)
+		if err := p.WaitForCompletion(60 * time.Second); err != nil {
+			fmt.Printf("[P%d] Warning: %v\n", processID, err)
+		}
+
+		// In stats cuối cùng
+		printStats(p)
 		return
 	}
 
@@ -134,12 +153,11 @@ func loadConfig(filename string) (*Config, error) {
 	return &config, nil
 }
 
-// Hàm helper để in stats
 func printStats(p *process.Process) {
 	stats := p.GetStats()
 	fmt.Println("\n=== Process Statistics ===")
 	fmt.Printf("Process ID: %d\n", stats["id"])
-	fmt.Printf("Vector Clock: %v\n", stats["vector_clock"])
+	fmt.Printf("Local Time (tP): %v\n", stats["local_time"])
 	fmt.Printf("Delivered Messages: %d\n", stats["delivered_count"])
 	fmt.Printf("Buffered Messages: %d\n", stats["buffered_count"])
 	fmt.Println("\nSent Messages:")
@@ -150,6 +168,20 @@ func printStats(p *process.Process) {
 	for id, count := range stats["received_messages"].(map[int]int) {
 		fmt.Printf("  From P%d: %d\n", id, count)
 	}
+
+	// Tính tổng
+	totalSent := 0
+	for _, count := range stats["sent_messages"].(map[int]int) {
+		totalSent += count
+	}
+	totalReceived := 0
+	for _, count := range stats["received_messages"].(map[int]int) {
+		totalReceived += count
+	}
+	fmt.Printf("\nTotal Sent: %d\n", totalSent)
+	fmt.Printf("Total Received: %d\n", totalReceived)
+	fmt.Printf("Total Delivered: %d\n", stats["delivered_count"])
+	fmt.Printf("Total Buffered: %d\n", stats["buffered_count"])
 }
 
 func printBuffered(p *process.Process) {
@@ -159,5 +191,6 @@ func printBuffered(p *process.Process) {
 
 func printVectorClock(p *process.Process) {
 	stats := p.GetStats()
-	fmt.Printf("\nVector Clock: %v\n", stats["vector_clock"])
+	fmt.Printf("\nLocal Time (tP): %v\n", stats["local_time"])
+	fmt.Printf("Vector P entries: %v\n", stats["vector_p"])
 }
