@@ -381,6 +381,9 @@ ses-project/
 4. **Monitoring**: Real-time dashboard with message flow visualization
 5. **Testing**: Chaos engineering (random delays, message loss)
 
+## Link to Video Demo
+- Link: [SES_video](https://drive.google.com/file/d/1LUohv33uK4TCOhpl1-qevQh68L3kyYQH/view?usp=drive_link)
+
 ## References
 
 ### SES Algorithm Papers
